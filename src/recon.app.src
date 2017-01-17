@@ -5,7 +5,7 @@
   {registered, []},
   {applications, [kernel, stdlib]},
 
-  {maintainers, ["Fred Hebert"]},
+  {maintainers, ["Fred Hebert", "Shailen Karur"]},
   {licenses, ["BSD"]},
   {links, [{"Github", "https://github.com/ferd/recon/"},
            {"Documentation", "http://ferd.github.io/recon/"}]},
