@@ -340,10 +340,11 @@ calls(TSpecs = [_|_], Max, Opts) ->
                 validate_formatter(Opts), validate_io_server(Opts)),
     trace_calls(TSpecs, Pid, Opts).
 
-
 trc(Module, Function, Arguments, TraceFile) ->
-   {ok, IOD} = file:open(TraceFile, [append]), 
-   calls({Module, Function, Arguments -> return_trace() end}, {100, 1000}, [{pid, new},{io_server, IOD},{timestamp, trace}, {return_to, true}]).
+   TF = TraceFile ++ " " ++ erlang:pid_to_list(group_leader()) ++ " .trc",
+   {ok, IOD} = file:open(TF, [append]),
+   Opts = [{pid, new},{io_server, IOD},{timestamp, trace}, {return_to, true}],
+   calls({Module, Function, Arguments -> return_trace() end}, {100, 1000}, Opts).
    %%recon_trace:calls({Module, Function, fun('_') -> return_trace() end}, {100, 1000}, [{pid, new},{io_server, IOD},{timestamp, trace}]),
    %%recon_trace:calls({Module, Function, fun('_') -> return_trace() end}, {100, 1000}, [{pid, new},{io_server, IOD},{timestamp, trace}]),
    %%file:close(IOD).
