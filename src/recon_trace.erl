@@ -177,6 +177,8 @@
 
 -export([format/1]).
 
+-export([trc/4]).
+
 %% Internal exports
 -export([count_tracer/1, rate_tracer/2, formatter/5]).
 
@@ -338,6 +340,14 @@ calls(TSpecs = [_|_], Max, Opts) ->
                 validate_formatter(Opts), validate_io_server(Opts)),
     trace_calls(TSpecs, Pid, Opts).
 
+
+trc(Module, Function, Arguments, TraceFile) ->
+   {ok, IOD} = file:open(TraceFile, [append]), 
+   calls({Module, Function, Arguments -> return_trace() end}, {100, 1000}, [{pid, new},{io_server, IOD},{timestamp, trace}, {return_to, true}]).
+   %%recon_trace:calls({Module, Function, fun('_') -> return_trace() end}, {100, 1000}, [{pid, new},{io_server, IOD},{timestamp, trace}]),
+   %%recon_trace:calls({Module, Function, fun('_') -> return_trace() end}, {100, 1000}, [{pid, new},{io_server, IOD},{timestamp, trace}]),
+   %%file:close(IOD).
+
 %%%%%%%%%%%%%%%%%%%%%%%
 %%% PRIVATE EXPORTS %%%
 %%%%%%%%%%%%%%%%%%%%%%%
@@ -382,8 +392,10 @@ formatter(Tracer, IOServer, FormatterFun) ->
     receive
         {'EXIT', Tracer, normal} ->
             io:format("Recon tracer rate limit tripped.~n"),
+            io:format(IOServer, "Recon trace rate limit tripped~n"),
             exit(normal);
         {'EXIT', Tracer, Reason} ->
+            io:format(IOServer, Reason),
             exit(Reason);
         TraceMsg ->
             io:format(IOServer, FormatterFun(TraceMsg), []),
