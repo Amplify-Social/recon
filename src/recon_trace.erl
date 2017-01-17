@@ -175,9 +175,7 @@
 %% API
 -export([clear/0, calls/2, calls/3]).
 
--export([format/1]).
-
--export([trc/4]).
+-export([trc/4, format/1]).
 
 %% Internal exports
 -export([count_tracer/1, rate_tracer/2, formatter/5]).
@@ -215,6 +213,7 @@
 %%% PUBLIC %%%
 %%%%%%%%%%%%%%
 
+
 %% @doc Stops all tracing at once.
 -spec clear() -> ok.
 clear() ->
@@ -249,6 +248,16 @@ calls(TSpecs = [_|_], Max) ->
 %%      a match specification</li>
 %% </ul>
 %%
+trc(Module, Function, Arguments, TraceFile) ->
+   TF = TraceFile ++ "trace_pid_" ++ erlang:pid_to_list(group_leader()) ++ ".trc",
+   {ok, FD} = file:open(TF, [append]),
+   Call = "({Module, Function, Arguments -> return_trace() end}, {100, 1000}, [{pid, new},{io_server, FD},{timestamp, trace}]",
+   file:write(FD, Call ++ " made\n"),
+   Opts = [{pid, new},{io_server, FD},{timestamp, trace}],
+   calls({Module, Function, Arguments}, {100, 1000}, Opts),
+   %%recon_trace:calls({Module, Function, Arguments -> return_trace() end}, {100, 1000}, [{pid, new},{io_server, FD},{timestamp, trace}]),
+   ok.
+
 %% There is also an argument specifying either a maximal count (a number)
 %% of trace messages to be received, or a maximal frequency (`{Num, Millisecs}').
 %%
@@ -327,27 +336,18 @@ calls(TSpecs = [_|_], Max) ->
 %% can be risky if more trace messages are generated than any process on
 %% the node could ever handle, despite the precautions taken by this library.
 %% @end
+
+
 -spec calls(tspec() | [tspec(),...], max(), options()) -> num_matches().
 
 calls({Mod, Fun, Args}, Max, Opts) ->
     calls([{Mod,Fun,Args}], Max, Opts);
 calls(TSpecs = [_|_], {Max, Time}, Opts) ->
-    Pid = setup(rate_tracer, [Max, Time],
-                validate_formatter(Opts), validate_io_server(Opts)),
+    Pid = setup(rate_tracer, [Max, Time], validate_formatter(Opts), validate_io_server(Opts)),
     trace_calls(TSpecs, Pid, Opts);
 calls(TSpecs = [_|_], Max, Opts) ->
-    Pid = setup(count_tracer, [Max],
-                validate_formatter(Opts), validate_io_server(Opts)),
+    Pid = setup(count_tracer, [Max], validate_formatter(Opts), validate_io_server(Opts)),
     trace_calls(TSpecs, Pid, Opts).
-
-trc(Module, Function, Arguments, TraceFile) ->
-   TF = TraceFile ++ " " ++ erlang:pid_to_list(group_leader()) ++ " .trc",
-   {ok, IOD} = file:open(TF, [append]),
-   Opts = [{pid, new},{io_server, IOD},{timestamp, trace}, {return_to, true}],
-   calls({Module, Function, Arguments -> return_trace() end}, {100, 1000}, Opts).
-   %%recon_trace:calls({Module, Function, fun('_') -> return_trace() end}, {100, 1000}, [{pid, new},{io_server, IOD},{timestamp, trace}]),
-   %%recon_trace:calls({Module, Function, fun('_') -> return_trace() end}, {100, 1000}, [{pid, new},{io_server, IOD},{timestamp, trace}]),
-   %%file:close(IOD).
 
 %%%%%%%%%%%%%%%%%%%%%%%
 %%% PRIVATE EXPORTS %%%
@@ -390,17 +390,27 @@ formatter(Tracer, Parent, Ref, FormatterFun, IOServer) ->
     formatter(Tracer, IOServer, FormatterFun).
 
 formatter(Tracer, IOServer, FormatterFun) ->
+    %%[H,T] = IOServer, 
+    %%io:format("IOServer is ~p,~n",[IOServer]),
     receive
         {'EXIT', Tracer, normal} ->
             io:format("Recon tracer rate limit tripped.~n"),
-            io:format(IOServer, "Recon trace rate limit tripped~n"),
+	    %%[H,T] = IOServer, 
+            %%io:format(H,"Recon tracer rate limit tripped.~n",[]),
+            %%{ok, D} = file:open(IOServer, [append]),
+            file:write(IOServer, "Recon tracer rate limit tripped, exiting"),
+            %%io:format(IOServer, FormatterFun("Recon tracer rate limit tripped, exiting"), []),
+            file:close(IOServer),
             exit(normal);
         {'EXIT', Tracer, Reason} ->
-            io:format(IOServer, Reason),
+            %%{ok, D} = file:open(IOServer, [append]),
+            file:write(IOServer, Reason),
+            file:close(IOServer),
             exit(Reason);
         TraceMsg ->
-            io:format(IOServer, FormatterFun(TraceMsg), []),
-            formatter(Tracer, IOServer, FormatterFun)
+	        %%[H,T] = IOServer, 
+                io:format(IOServer, FormatterFun(TraceMsg), []),
+                formatter(Tracer, group_leader(), FormatterFun)
     end.
 
 
@@ -442,7 +452,7 @@ trace_calls(TSpecs, Pid, Opts) ->
 validate_opts(Opts) ->
     PidSpecs = validate_pid_specs(proplists:get_value(pid, Opts, all)),
     Scope = proplists:get_value(scope, Opts, global),
-    TraceOpts = case proplists:get_value(timestamp, Opts, formatter) of
+    TraceOpts = case proplists:get_value(timestamp, Opts, trace) of
                     formatter -> [];
                     trace -> [timestamp]
                  end ++
@@ -461,6 +471,7 @@ validate_opts(Opts) ->
                          []
                  end,
     MatchOpts = [Scope],
+    %%io:format("validate, PIDSpecs ~p, TraceOpts ~p, MatchOpts ~p~n",[PidSpecs, TraceOpts, MatchOpts]),
     {PidSpecs, TraceOpts, MatchOpts}.
 
 %% Support the regular specs, but also allow `recon:pid_term()' and lists
@@ -510,7 +521,10 @@ validate_formatter(Opts) ->
     end.
 
 validate_io_server(Opts) ->
-    proplists:get_value(io_server, Opts, group_leader()).
+    %%{ok, File} = file:open("/tmp/trace",[append]),
+    %%Opts1 = [{io_server, File} | Opts],
+    proplists:get_value(io_server, Opts).
+    %%Opts1.%%, group_leader()).
 
 %%%%%%%%%%%%%%%%%%%%%%%%
 %%% TRACE FORMATTING %%%
